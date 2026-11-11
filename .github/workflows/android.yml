@@ -1,11 +1,14 @@
 name: Android preview
 on:
   push:
-    branches: [main, 'feature/**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -54,7 +54,7 @@ The core module is plain Java 8-compatible code. Android minimum: 8.0 / API 26.
 
 GitHub Actions builds a debug-signed preview APK, checks the merged manifest for network/billing permissions, runs the core integration suite, and compares four upstream Java world fixtures with an independent `nbtlib` decoder. The APK is uploaded only when these jobs pass. Debug builds from different runners may have different signing keys; installing one over another may require uninstalling the earlier preview.
 
-Local verification at initial implementation: 40 core checks passed. Android compilation, real fixture results and device behavior must be reported from their actual checks, not inferred from source. No Android emulator/device validation has been performed at this stage.
+Local verification: 41 core checks passed. Android compilation, real fixture results and device behavior must be reported from their actual checks, not inferred from source. No Android emulator/device validation has been performed at this stage.
 
 ## Remaining work for the requested app
 

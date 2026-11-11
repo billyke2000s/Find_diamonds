@@ -39,6 +39,11 @@ public final class CoreTest {
         }
         byte[] ids=new byte[4096];ids[(7<<8)|(2<<4)|1]=56;Map<String,Object> sec=new HashMap<>();sec.put("Y",(byte)0);sec.put("Blocks",ids);Map<String,Object> level=new HashMap<>();level.put("Sections",Collections.singletonList(sec));Search q=query(1,7,2);JavaRegion.scanChunk(Collections.singletonMap("Level",level),0,0,q);ok(q.blocks.contains(new Pos(1,7,2)),"Legacy numeric ID section");
         byte[] huge={10,0,0,7,0,1,'x',127,-1,-1,-1};bad(()->new Nbt(new ByteArrayInputStream(huge),false).root(),"Reject huge NBT array");
+        // Palette entry 16 at block index 12 crosses the 64-bit boundary in
+        // pre-1.16 five-bit packing. Its single set bit is bit zero of word 1.
+        List<Object> wide=new ArrayList<>();for(int i=0;i<17;i++)wide.add(Collections.singletonMap("Name",i==16?"minecraft:diamond_ore":"minecraft:stone"));
+        long[] crossing=new long[320];crossing[1]=1;Map<String,Object> wideSection=new HashMap<>();wideSection.put("Y",(byte)0);wideSection.put("Palette",wide);wideSection.put("BlockStates",crossing);
+        Map<String,Object> wideRoot=new HashMap<>();wideRoot.put("DataVersion",1976);wideRoot.put("Sections",Collections.singletonList(wideSection));Search crossed=query(12,0,0);JavaRegion.scanChunk(wideRoot,0,0,crossed);ok(crossed.blocks.equals(Collections.singleton(new Pos(12,0,0))),"Five-bit palette entry spanning two long words");
     }
     static byte[] nbtName(String name) throws IOException {ByteArrayOutputStream b=new ByteArrayOutputStream();b.write(10);le16(b,0);b.write(8);string(b,"name");string(b,name);b.write(0);return b.toByteArray();}
     static byte[] subchunk(int version,int sy) throws IOException {

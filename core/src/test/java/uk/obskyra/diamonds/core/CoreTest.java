@@ -13,7 +13,7 @@ public final class CoreTest {
     private static void ok(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
     private static void bad(Checked run,String message) throws Exception {boolean rejected=false;try{run.run();}catch(IOException|IllegalArgumentException e){rejected=true;}ok(rejected,message);}
     public static void main(String[] args) throws Exception {
-        testBinary();testJava();testBedrock();testDatabase();testArchive();testSearch();testSeeds();
+        testBinary();testJava();testBedrock();testDatabase();testArchive();testSearch();testSeeds();testSeedGeneration();
         System.out.println("PASS: "+checks+" core checks");
     }
     static Search query(int x,int y,int z){return new Search(x,y,z,32,0,Ore.DIAMOND,null);}
@@ -85,6 +85,42 @@ public final class CoreTest {
     }
     static void testSearch() throws Exception {Search q=query(-1,0,-1);ok(q.includesChunk(-1,-1),"Negative floor chunk");q.add(-1,0,-1);q.add(-2,0,-1);q.add(8,0,8);List<Search.Vein> v=q.veins();ok(v.size()==2 && v.get(0).count==2 && v.get(0).pos.equals(new Pos(-1,0,-1)),"Group and order ore veins");q.add(1000,0,1000);ok(q.blocks.size()==3,"Exclude out-of-radius ore");Thread.currentThread().interrupt();try{bad(()->Search.check(),"Cancellation interrupts searches");}finally{Thread.interrupted();}}
     static void testSeeds() throws Exception {ok(SeedSupport.numericSeed("-9223372036854775808")==Long.MIN_VALUE,"Minimum signed seed");ok(SeedSupport.numericSeed("9223372036854775807")==Long.MAX_VALUE,"Maximum signed seed");bad(()->SeedSupport.numericSeed("9223372036854775808"),"No numeric overflow fallback to text hash");bad(()->SeedSupport.numericSeed("hello"),"No invented text seed support");ok(SeedSupport.unavailable(SeedSupport.Edition.BEDROCK,"1.21").contains("not been verified"),"Unsupported seed version is explicit");}
+    static void testSeedGeneration() throws Exception {
+        long[] seeds={0,1,42,Long.MAX_VALUE,Long.MIN_VALUE};
+        long[][] vectors={
+            {3038984751730664151L,4633751808550626728L,1839370570109928317L},
+            {-1033667707451936253L,-1821890264506418920L,8094835630624897715L},
+            {-4695948378802814517L,-7542733517267348717L,8419651029966521324L},
+            {-4337892647980267059L,6464058115248227873L,-4107676909484759718L},
+            {5559461709638992951L,-3866801758199126022L,-137015973405880411L}
+        };
+        // Generated independently with a Python unsigned-64 reference, including
+        // signed low-word addition in the game's bit-oriented wrapper.
+        for(int i=0;i<seeds.length;i++) {
+            WorldgenRng modern=new WorldgenRng(true,seeds[i]);
+            for(long expected:vectors[i])ok(modern.nextLong()==expected,"Modern worldgen RNG reference vector");
+            Random standard=new Random(seeds[i]);WorldgenRng legacy=new WorldgenRng(false,seeds[i]);
+            for(int bound:new int[]{1,2,3,16,81,1000000007,Integer.MAX_VALUE}) {
+                ok(legacy.nextInt(bound)==standard.nextInt(bound),"Legacy bounded RNG agrees with JDK");
+                ok(legacy.nextLong()==standard.nextLong(),"Legacy long RNG agrees with JDK");
+                ok(legacy.nextDouble()==standard.nextDouble(),"Legacy double RNG agrees with JDK");
+            }
+        }
+        for(DiamondProfile profile:DiamondProfile.values()) {
+            Search small=new Search(-1,0,-1,32,0,Ore.DIAMOND,null);
+            JavaDiamondSeeds.search(42,profile,small);
+            ok(!small.blocks.isEmpty(),"Seed search produces candidate geometry: "+profile.version);
+            Search large=new Search(-1,0,-1,64,0,Ore.DIAMOND,null);
+            JavaDiamondSeeds.search(42,profile,large);
+            ok(large.blocks.containsAll(small.blocks),"Cross-chunk/radius consistency: "+profile.version);
+            boolean bounded=true;
+            for(Pos p:small.blocks)bounded&=Math.abs(p.x+1)<=32 && Math.abs(p.z+1)<=32 && p.y>=(profile.modern?-64:0) && p.y<=16;
+            ok(bounded,"Version height and search bounds: "+profile.version);
+        }
+        bad(()->DiamondProfile.from("1.21.11"),"Do not alias unsupported version to a different generator");
+        bad(()->JavaDiamondSeeds.search(42,DiamondProfile.JAVA_1_21_1,new Search(0,0,0,32,1,Ore.DIAMOND,null)),"Reject unsupported seed dimension");
+        Thread.currentThread().interrupt();try{bad(()->JavaDiamondSeeds.search(42,DiamondProfile.JAVA_1_21_1,query(0,0,0)),"Cancel seed generation");}finally{Thread.interrupted();}
+    }
     static void writeZip(File file,Map<String,byte[]> entries)throws IOException{try(ZipOutputStream out=new ZipOutputStream(new FileOutputStream(file))){for(Map.Entry<String,byte[]> e:entries.entrySet()){out.putNextEntry(new ZipEntry(e.getKey()));out.write(e.getValue());out.closeEntry();}}}
     static void string(OutputStream out,String s)throws IOException{byte[] bytes=s.getBytes(StandardCharsets.UTF_8);le16(out,bytes.length);out.write(bytes);}
     static void le16(OutputStream out,int n)throws IOException{out.write(n);out.write(n>>>8);}
